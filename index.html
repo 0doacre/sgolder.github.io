@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisation Dynamique ULIS</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- LOAD DATA EXTERNALLY -->
+    <script src="data_ulis.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            /* Palette principale */
+            --color-primary: #1e3a5f;
+            --color-primary-light: #2a5a8f;
+            --color-accent: #4a90d9;
+
+            /* Couleurs sémantiques */
+            --color-1er-degre: #2ecc71;
+            --color-2nd-degre: #9b59b6;
+            --color-spe: #e74c3c;
+            /* Default Special */
+            --color-dar: #e67e22;
+            /* Orange for DAR */
+            --color-tsa: #e74c3c;
+            /* Red for TSA */
+            --color-tfm: #d35400;
+            /* Darker Orange for TFM */
+            --color-tdl: #c0392b;
+            /* Dark Red for TDL */
+
+            /* Neutres */
+            --color-bg: #f8fafc;
+            --color-surface: #ffffff;
+            --color-border: #e2e8f0;
+            --color-text: #1a202c;
+            --color-text-muted: #64748b;
+
+            /* KPI */
+            --color-kpi-total: #3b82f6;
+            --color-kpi-capacity: #f59e0b;
+        }
+
+        /* Responsive Improvements */
+        @media (max-width: 768px) {
+            #main-container {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                height: 40%;
+                box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            }
+
+            #map {
+                height: 60%;
+            }
+
+            header h1 {
+                font-size: 1.2rem;
+            }
+
+            .header-subtitle {
+                display: none;
+            }
+
+            #controls {
+                gap: 10px;
+                padding: 12px;
+            }
+
+            .filter-group {
+                flex: 1 1 100%;
+            }
+
+            /* Stack filters on mobile */
+            .btn-export {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Z-Index Fixes */
+        .leaflet-container {
+            z-index: 1 !important;
+        }
+
+        #controls {
+            position: relative;
+            z-index: 1000;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: var(--color-bg);
+            color: var(--color-text);
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+            padding: 16px 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-icon {
+            font-size: 24px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .header-subtitle {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            font-weight: 400;
+            display: block;
+        }
+
+        .btn-export {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-export:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+
+        #controls {
+            padding: 16px 24px;
+            background: var(--color-surface);
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        select {
+            appearance: none;
+            background-color: white;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding: 10px 40px 10px 12px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--color-text);
+            min-width: 200px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            font-family: inherit;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.15);
+        }
+
+        #main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #sidebar {
+            width: 380px;
+            background: var(--color-surface);
+            box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            overflow-y: auto;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .kpi-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .kpi-card {
+            background: linear-gradient(135deg, var(--color-kpi-total) 0%, #2563eb 100%);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+            position: relative;
+            overflow: hidden;
+            color: white;
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .kpi-card:nth-child(2) {
+            background: linear-gradient(135deg, var(--color-kpi-capacity) 0%, #d97706 100%);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+        }
+
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+
+        .kpi-card h3 {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        .kpi-card p {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 4px 0 0;
+            line-height: 1.1;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            color: var(--color-primary);
+        }
+
+        #details p {
+            color: var(--color-text-muted);
+            margin-bottom: 0;
+        }
+
+        .establishment-info {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .establishment-info h3 {
+            margin: 0 0 16px 0;
+            font-size: 1.1rem;
+            color: var(--color-primary);
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 8px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--color-border);
+            font-size: 0.95rem;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--color-text-muted);
+            font-size: 0.85rem;
+        }
+
+        .info-value {
+            font-weight: 500;
+            color: var(--color-text);
+            text-align: right;
+            word-break: break-word;
+            max-width: 60%;
+        }
+
+        /* Custom Markers */
+        .custom-marker {
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+            transition: transform 0.2s;
+        }
+
+        .custom-marker:hover {
+            transform: scale(1.1);
+            z-index: 1000 !important;
+        }
+
+        /* Map Legend */
+        .map-legend {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                height: auto;
+                display: block;
+                background: white;
+            }
+
+            #sidebar {
+                box-shadow: none;
+                width: 100%;
+                padding: 0;
+            }
+
+            .kpi-card {
+                border: 1px solid #ccc;
+                color: black;
+                background: white !important;
+                box-shadow: none;
+            }
+
+            .kpi-card p {
+                color: black;
+            }
+
+            header,
+            #controls,
+            .btn-export,
+            .map-legend {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="header-brand">
+            <span class="header-icon">🏫</span>
+            <div>
+                <h1>Observatoire ULIS</h1>
+                <span class="header-subtitle">Académie de Strasbourg</span>
+            </div>
+        </div>
+        <div style="display:flex; gap:10px">
+            <button class="btn-export" onclick="exportToCSV()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="8" y1="13" x2="16" y2="13"></line>
+                    <line x1="8" y1="17" x2="16" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                CSV
+            </button>
+            <button class="btn-export" onclick="exportToPDF()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                PDF
+            </button>
+        </div>
+    </header>
+
+    <div id="controls">
+        <div class="filter-group" style="flex-grow: 1;">
+            <label for="search-input">🔍 Recherche</label>
+            <div style="position:relative">
+                <input type="text" id="search-input" placeholder="Rechercher par Nom ou UAI..." oninput="applyFilters()"
+                    style="width:100%; padding: 10px 12px; padding-left: 36px; border: 1px solid var(--color-border); border-radius: 8px; font-family: inherit; font-size: 0.9rem; box-sizing: border-box;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    style="position:absolute; left:12px; top:50%; transform:translateY(-50%)">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+            </div>
+        </div>
+        <div class="filter-group">
+            <label for="filter-degre">🎓 Degré / Dispositif</label>
+            <select id="filter-degre" onchange="applyFilters()">
+                <option value="all">Tous les établissements</option>
+                <optgroup label="Niveaux Scolaires">
+                    <option value="1er degré">1er Degré (Écoles)</option>
+                    <option value="2nd degré">2nd Degré (Collèges/Lycées)</option>
+                </optgroup>
+                <optgroup label="Dispositifs Spécialisés">
+                    <option value="spe_all">Tous les dispositifs Spécialisés</option>
+                    <option value="spe_TSA">TSA (Autisme)</option>
+                    <option value="spe_DAR">DAR (Autorégulation)</option>
+                    <option value="spe_TFM">TFM (Trouble Fonction Moteur)</option>
+                    <option value="spe_TDL">TDL (Trouble Langage)</option>
+                </optgroup>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="filter-circo">📍 Circonscription</label>
+            <select id="filter-circo" onchange="applyFilters()">
+                <option value="all">Toutes les circonscriptions</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div id="map"></div>
+        <div class="map-legend">
+            <div class="legend-item"><span class="legend-dot" style="background: var(--color-1er-degre)"></span>1er
+                degré (Écoles)</div>
+            <div class="legend-item"><span class="legend-dot" style="background: var(--color-2nd-degre)"></span>2nd
+                degré (Collèges/Lycées)</div>
+            <div class="legend-item"><span class="legend-dot" style="background: var(--color-tsa)"></span>TSA (Rouge)
+            </div>
+            <div class="legend-item"><span class="legend-dot" style="background: var(--color-dar)"></span>DAR (Orange)
+            </div>
+            <div class="legend-item"><span class="legend-dot" style="background: var(--color-tfm)"></span>TFM (Orange
+                Foncé)</div>
+        </div>
+
+        <div id="sidebar" id="print-area">
+            <div id="kpi-section" class="kpi-container">
+                <div class="kpi-card">
+                    <h3>Total (Sélection)</h3>
+                    <p id="total-count">0</p>
+                </div>
+                <div class="kpi-card">
+                    <h3>Capacité (Sélection)</h3>
+                    <p id="total-capa">0</p>
+                </div>
+            </div>
+            <div id="details">
+                <h2>Détails Établissement</h2>
+                <div id="selection-content">
+                    <p>👆 Sélectionnez un établissement sur la carte pour voir sa fiche détaillée.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DONNEES ---
+        // dataUlis is loaded from data_ulis.js
+        if (typeof dataUlis === 'undefined') {
+            console.error("data_ulis.js not loaded!");
+        }
+
+        // --- INITIALISATION CARTE ---
+        const map = L.map('map').setView([48.6, 7.7], 9);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Smart Clustering: Color depends on majority content
+        const markersCluster = L.markerClusterGroup({
+            iconCreateFunction: function (cluster) {
+                const markers = cluster.getAllChildMarkers();
+                let count1er = 0;
+                let count2nd = 0;
+                let countSpe = 0;
+
+                markers.forEach(m => {
+                    // We need to store data in the marker to retrieve it here
+                    // Current implementation doesn't easily expose data back from marker options
+                    // But we can check the icon color or similar. 
+                    // Better: bind data to marker options for easy access
+                    if (m.options.degre === "1er degré") count1er++;
+                    else if (String(m.options.degre).includes("Spécialisé")) countSpe++;
+                    else count2nd++;
+                });
+
+                let c = ' marker-cluster-';
+                let bgStyle = "";
+
+                // Logic: Majority wins. Spe has priority if significant? 
+                // Simple logic: Max count determines color
+                if (countSpe > 0 && countSpe >= count1er && countSpe >= count2nd) {
+                    bgStyle = "background-color: rgba(231, 76, 60, 0.6);"; // Red
+                } else if (count1er >= count2nd) {
+                    bgStyle = "background-color: rgba(46, 204, 113, 0.6);"; // Green
+                } else {
+                    bgStyle = "background-color: rgba(155, 89, 182, 0.6);"; // Purple
+                }
+
+                return L.divIcon({
+                    html: `<div style="${bgStyle} width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.2);"><span>${cluster.getChildCount()}</span></div>`,
+                    className: 'custom-cluster',
+                    iconSize: new L.Point(40, 40)
+                });
+            }
+        });
+        map.addLayer(markersCluster);
+
+        // --- LOGIQUE FILTRES ---
+        function populateFilters() {
+            const circoSelect = document.getElementById('filter-circo');
+            // Filter out empty circos
+            const circos = [...new Set(dataUlis.map(d => d.circo).filter(c => c && c !== "nan"))].sort();
+            circos.forEach(c => {
+                let opt = document.createElement('option');
+                opt.value = c; opt.innerHTML = c;
+                circoSelect.appendChild(opt);
+            });
+        }
+
+        function applyFilters() {
+            const degre = document.getElementById('filter-degre').value;
+            const circo = document.getElementById('filter-circo').value;
+            // SEARCH: Get value
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+
+            markersCluster.clearLayers();
+
+            // Filter logic
+            let filtered = dataUlis.filter(d => {
+                let matchDegre = false;
+                if (degre === 'all') matchDegre = true;
+                else if (degre === 'spe_all') matchDegre = String(d.degre).includes("Spécialisé");
+                else if (degre.startsWith('spe_')) {
+                    // Specific sub-type filter (e.g. spe_TSA)
+                    const typeNeeded = degre.replace('spe_', '');
+                    matchDegre = String(d.spec_type).includes(typeNeeded);
+                }
+                else matchDegre = d.degre === degre;
+
+                let matchCirco = (circo === 'all' || d.circo === circo);
+
+                // SEARCH: Check match
+                let matchSearch = true;
+                if (searchTerm) {
+                    const searchStr = (d.nom + " " + d.uai + " " + d.ville).toLowerCase();
+                    matchSearch = searchStr.includes(searchTerm);
+                }
+
+                return matchDegre && matchCirco && matchSearch;
+            });
+
+            filtered.forEach(d => {
+                // Robust parsing
+                const lat = parseFloat(String(d.lat).replace(',', '.'));
+                const lng = parseFloat(String(d.lng).replace(',', '.'));
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    // COLOR LOGIC
+                    let color = "#9b59b6"; // default 2nd degre
+                    let iconPath = `<path d="M3 21h18M5 21V7l8-4 8 4v14M8 21v-2a2 0 0 1 2-2h4a2 0 0 1 2 2v2"></path>`; // Building
+
+                    if (d.degre === "1er degré") {
+                        color = "#2ecc71";
+                        iconPath = `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`;
+                    } else if (String(d.degre).includes("Spécialisé")) {
+                        // Subtype colors
+                        const spec = String(d.spec_type).toUpperCase();
+                        if (spec.includes("TSA")) color = "var(--color-tsa)"; // Red
+                        else if (spec.includes("DAR")) color = "var(--color-dar)"; // Orange
+                        else if (spec.includes("TFM")) color = "var(--color-tfm)"; // Dark Orange
+                        else if (spec.includes("TDL")) color = "var(--color-tdl)"; // Dark Red
+                        else color = "var(--color-spe)"; // Default Spe
+
+                        iconPath = `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>`;
+                    }
+
+                    const customIcon = L.divIcon({
+                        className: 'custom-marker',
+                        html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="fill:white">${iconPath}</svg>`,
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 28]
+                    });
+
+                    // Pass degre to options for cluster logic
+                    const marker = L.marker([lat, lng], { icon: customIcon, degre: d.degre });
+
+                    // Stylized popup
+                    const popupContent = `
+                        <div style="text-align:center">
+                            <strong style="color:${color}; font-size:1.1em">${d.nom}</strong><br>
+                            <span style="color:#64748b; font-size:0.9em">${d.ville}</span><br>
+                            <span style="display:inline-block; margin-top:4px; padding:2px 6px; background:${color}20; color:${color}; border-radius:4px; font-size:0.75em; font-weight:600">${d.degre}</span>
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupContent);
+                    marker.on('click', () => showDetails(d, color));
+                    markersCluster.addLayer(marker);
+                }
+            });
+
+            // Fit bounds if we have markers
+            if (markersCluster.getLayers().length > 0) {
+                map.fitBounds(markersCluster.getBounds());
+            }
+
+            updateKPIs(filtered);
+            window.currentFilteredData = filtered;
+        }
+
+        function updateKPIs(list) {
+            document.getElementById('total-count').innerText = list.length;
+            document.getElementById('total-capa').innerText = list.reduce((a, b) => a + (b.capa || 0), 0);
+        }
+
+        function showDetails(d, color) {
+            // color passed from maker loop or re-calculated
+            if (!color) color = "var(--color-primary)";
+
+            const content = `
+            <div class="establishment-info" style="border-left: 4px solid ${color}">
+                <h3>${d.nom}</h3>
+                <div class="info-row"><span class="info-label">Ville</span><span class="info-value">${d.ville}</span></div>
+                <div class="info-row"><span class="info-label">Adresse</span><span class="info-value">${d.adresse || '-'}</span></div>
+                <div class="info-row"><span class="info-label">UAI</span><span class="info-value" style="font-family:monospace">${d.uai}</span></div>
+                <div class="info-row"><span class="info-label">Degré/Type</span><span class="info-value" style="color:${color}; font-weight:700">${d.degre}</span></div>
+                <div class="info-row"><span class="info-label">Circonscription</span><span class="info-value">${d.circo}</span></div>
+                <div class="info-row"><span class="info-label">Capacité</span><span class="info-value">${d.capa || '?'} élèves</span></div>
+                <div class="info-row"><span class="info-label">Coordonnateur</span><span class="info-value">${d.coordo}</span></div>
+                <div class="info-row"><span class="info-label">Référent ERSEH</span><span class="info-value">${d.erseh}</span></div>
+            </div>
+            `;
+            document.getElementById('selection-content').innerHTML = content;
+        }
+
+        // --- FONCTION EXPORT PDF ---
+        async function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const sidebar = document.getElementById('sidebar');
+
+            pdf.text("Rapport d'activité ULIS - Académie de Strasbourg", 10, 10);
+
+            // Capture des KPI et détails with fixed background
+            const canvas = await html2canvas(sidebar, {
+                backgroundColor: '#ffffff', // FORCE WHITE BACKGROUND
+                scale: 2
+            });
+            const imgData = canvas.toDataURL('image/png');
+
+            // Adjust to fit PDF width
+            const pdfWidth = 190;
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+            pdf.addImage(imgData, 'PNG', 10, 20, pdfWidth, pdfHeight);
+
+            pdf.save('Rapport_ULIS.pdf');
+        }
+
+        // Lancement
+        populateFilters();
+        applyFilters();
+        // --- CSV EXPORT ---
+        function exportToCSV() {
+            const dataToExport = window.currentFilteredData || dataUlis;
+            if (dataToExport.length === 0) {
+                alert("Aucune donnée à exporter.");
+                return;
+            }
+
+            // Define columns
+            const header = ["UAI", "Nom", "Ville", "Adresse", "Degré", "Circonscription", "Capacité", "Coordonnateur", "ERSEH"];
+
+            // Build CSV content
+            const rows = dataToExport.map(d => [
+                d.uai,
+                `"${String(d.nom).replace(/"/g, '""')}"`, // Quote and escape quotes
+                d.ville,
+                `"${String(d.adresse).replace(/"/g, '""')}"`,
+                d.degre,
+                `"${String(d.circo).replace(/"/g, '""')}"`,
+                d.capa,
+                `"${String(d.coordo).replace(/"/g, '""')}"`,
+                `"${String(d.erseh).replace(/"/g, '""')}"`
+            ]);
+
+            const csvContent = [header.join(";"), ...rows.map(r => r.join(";"))].join("\n");
+
+            // Add BOM for Excel compatibility (UTF-8)
+            const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `ulis_export_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+
+</html>
